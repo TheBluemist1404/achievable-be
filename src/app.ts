@@ -1,5 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 const cors = require('cors');
+require('dotenv').config();
 const clientRouter = require('./routes/client/server.route');
 const adminRouter = require('./routes/admin/server.route')
 
