@@ -1,10 +1,12 @@
 import express, { Request, Response, NextFunction } from 'express';
-const cors = require('cors');
-require('dotenv').config();
-const clientRouter = require('./routes/client/server.route');
-const adminRouter = require('./routes/admin/server.route')
+import cors from 'cors';
+import dotenv from "dotenv";
+
+import {clientRouter} from './routes/client/server.route';
+import {adminRouter} from './routes/admin/server.route';
 
 const app = express();
+dotenv.config();
 
 app.use(express.json());           
 app.use(express.urlencoded({ extended: true }));
