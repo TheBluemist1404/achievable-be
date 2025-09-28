@@ -24,13 +24,24 @@ export const validateSignup = async (
     }
 
     return next();
-  } catch (err) {
-    next(err); // let error middleware handle DB errors
+  } catch (error) {
+    console.log(error)
+    next(error); // let error middleware handle DB errors
   }
 };
 
 
-export const validateLogin = (_req: Request, _res: Response, next: NextFunction) => {
-  // res.status(200).json({message: "validateLogin route"});
-  next()
+export const validateLogin = (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const {email, password} = req.body;
+
+    if (!email || !password) {
+      return res.status(409).json({message: "Missing info!"})
+    }
+
+    return next();
+  } catch (error) {
+    console.log(error)
+    next(error)
+  }
 }

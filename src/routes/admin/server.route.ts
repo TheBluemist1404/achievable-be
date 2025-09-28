@@ -1,7 +1,7 @@
 import { Express } from "express";
 // const authRoutes = require('../auth.route');
 
-module.exports = (app: Express) => {
+export const adminRouter = (app: Express) => {
   const version = '/api/v1';
   const uri = version + '/admin'
 
