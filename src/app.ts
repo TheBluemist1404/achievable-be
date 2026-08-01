@@ -2,8 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from "dotenv";
 
-import {clientRouter} from './routes/client/server.route';
-import {adminRouter} from './routes/admin/server.route';
+import {clientRouter} from './routes/server.route';
 
 const app = express();
 dotenv.config();
@@ -34,6 +33,5 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 clientRouter(app)
-adminRouter(app)
 
 export default app;
