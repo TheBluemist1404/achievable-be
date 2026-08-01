@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import * as authService from '@/services/auth.service'
-import { generateToken } from "@/utils/jwtGenerate";
+import { generateToken } from "@/utils/jwt-generate";
 
 export const signup = async (req: Request, res: Response) => {
   try {
