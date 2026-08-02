@@ -5,21 +5,25 @@ const userSchema = new mongoose.Schema(
     email: {
       type: String,
       unique: true,
-      require: true
+      required: true,
+      trim: true,
+      lowercase: true,
     },
     username: {
       type: String,
       minlength: 1,
-      require: true
+      maxlength: 50,
+      required: true,
+      trim: true,
     },
     password: {
       type: String,
-      minlength: 6,
-      require: true 
-    }
+      required: true,
+      select: false,
+    },
   },
-  {timestamps: true}
-)
+  { timestamps: true },
+);
 
 const User = mongoose.model('User', userSchema);
 export default User;

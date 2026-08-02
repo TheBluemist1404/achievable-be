@@ -6,7 +6,7 @@ import { Request, Response } from "express";
 
 type EmptyParams = Record<string, never>;
 
-// POST /api/v1/client/todo
+// POST /api/v1/todo
 export const createTodo = async (
   req: Request<EmptyParams, unknown, CreateTodoDto>,
   res: Response,
@@ -16,6 +16,7 @@ export const createTodo = async (
     const slug = toSlug(title, description);
 
     const todo = await Todo.create({
+      ownerId: req.auth!.userId,
       title,
       description,
       remindOptions,
@@ -32,13 +33,13 @@ export const createTodo = async (
   }
 };
 
-// GET /api/v1/client/todo
+// GET /api/v1/todo
 export const getTodos = async (
-  _req: Request,
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
-    const todos = await Todo.find();
+    const todos = await Todo.find({ ownerId: req.auth!.userId });
     res.status(200).json({ todos });
   } catch (error: unknown) {
     sendControllerError(error, res, {
@@ -47,7 +48,7 @@ export const getTodos = async (
   }
 };
 
-// GET /api/v1/client/todo/:id
+// GET /api/v1/todo/:id
 export const getTodoById = async (
   req: Request<TodoParams>,
   res: Response
@@ -55,7 +56,10 @@ export const getTodoById = async (
   try {
     const { id } = req.params;
 
-    const todo = await Todo.findById(id);
+    const todo = await Todo.findOne({
+      _id: id,
+      ownerId: req.auth!.userId,
+    });
 
     if (!todo) {
       res.status(404).json({ message: "Todo not found" });
@@ -70,7 +74,7 @@ export const getTodoById = async (
   }
 };
 
-// PUT /api/v1/client/todo/:id
+// PUT /api/v1/todo/:id
 export const updateTodo = async (
   req: Request<TodoParams, unknown, UpdateTodoDto>,
   res: Response
@@ -95,8 +99,8 @@ export const updateTodo = async (
       updates.dueDate = dueDate;
     }
 
-    const updatedTodo = await Todo.findByIdAndUpdate(
-      id,
+    const updatedTodo = await Todo.findOneAndUpdate(
+      { _id: id, ownerId: req.auth!.userId },
       { $set: updates },
       { new: true, runValidators: true }
     );
@@ -115,7 +119,7 @@ export const updateTodo = async (
   }
 };
 
-// DELETE /api/v1/client/todo/:id
+// DELETE /api/v1/todo/:id
 export const deleteTodo = async (
   req: Request<TodoParams>,
   res: Response
@@ -123,7 +127,10 @@ export const deleteTodo = async (
   try {
     const { id } = req.params;
 
-    const deletedTodo = await Todo.findByIdAndDelete(id);
+    const deletedTodo = await Todo.findOneAndDelete({
+      _id: id,
+      ownerId: req.auth!.userId,
+    });
 
     if (!deletedTodo) {
       res.status(404).json({ message: "Todo not found" });

@@ -14,9 +14,15 @@
 import mongoose from "mongoose";
 
 const todoSchema = new mongoose.Schema({
+  ownerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+    index: true,
+  },
   title: {
     type: String,
-    require: true
+    required: true
   },
   description: String,
   tags: [String],
@@ -29,7 +35,7 @@ const todoSchema = new mongoose.Schema({
   dueDate: Date,
   slug: {
     type: String,
-    require: true
+    required: true
   },
   completeDate: Date,
   completeStatus: {

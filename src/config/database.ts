@@ -1,15 +1,11 @@
 import mongoose from "mongoose";
-require("dotenv").config();
+import "dotenv/config";
 
-export default async function connect() {
-  if (process.env.DB_URI) {
-    try {
-      await mongoose.connect(process.env.DB_URI);
-      console.log("Database connected!");
-    } catch {
-      console.log("Failed to connect to database!");
-    }
-  } else {
-    console.log("uri not found!")
+export default async function connect(): Promise<void> {
+  if (!process.env.DB_URI) {
+    throw new Error("DB_URI is not configured");
   }
-};
+
+  await mongoose.connect(process.env.DB_URI);
+  console.log("Database connected!");
+}
