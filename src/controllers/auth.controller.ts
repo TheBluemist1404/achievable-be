@@ -2,15 +2,21 @@ import { LoginDto, SignupDto } from "@/dtos/auth.dto";
 import { Request, Response } from "express";
 import * as authService from "@/services/auth.service";
 import {
-  createSession,
-  deleteSession,
-} from "@/services/session.service";
+  issueAccessToken,
+  issueTokenPair,
+} from "@/services/auth-token.service";
+import {
+  createRefreshSession,
+  revokeRefreshSession,
+  revokeRefreshToken,
+  rotateRefreshToken,
+} from "@/services/refresh-token.service";
 import { sendControllerError } from "@/utils/controller-error";
 import {
-  clearSessionCookie,
-  getSessionCookie,
-  setSessionCookie,
-} from "@/utils/session-cookie";
+  clearRefreshTokenCookie,
+  getRefreshTokenCookie,
+  setRefreshTokenCookie,
+} from "@/utils/refresh-token-cookie";
 
 type EmptyParams = Record<string, never>;
 
@@ -27,10 +33,20 @@ export const signup = async (
       return;
     }
 
-    const sessionToken = await createSession(user.id);
-    setSessionCookie(res, sessionToken);
+    const tokens = await issueTokenPair(user.id);
+    setRefreshTokenCookie(
+      res,
+      tokens.refreshSession.refreshToken,
+      tokens.refreshSession.expiresInSeconds,
+    );
 
-    res.status(201).json({ message: "Account created", user });
+    res.setHeader("Cache-Control", "no-store");
+    res.status(201).json({
+      message: "Account created",
+      user,
+      accessToken: tokens.accessToken,
+      accessTokenExpiresInSeconds: tokens.accessTokenExpiresInSeconds,
+    });
   } catch (error: unknown) {
     sendControllerError(error, res, {
       badRequest: "Invalid signup data",
@@ -52,19 +68,82 @@ export const login = async (
       return;
     }
 
-    const previousSessionToken = getSessionCookie(req);
+    const previousRefreshToken = getRefreshTokenCookie(req);
 
-    if (previousSessionToken) {
-      await deleteSession(previousSessionToken);
+    if (previousRefreshToken) {
+      await revokeRefreshToken(previousRefreshToken);
     }
 
-    const sessionToken = await createSession(user.id);
-    setSessionCookie(res, sessionToken);
+    const tokens = await issueTokenPair(user.id);
+    setRefreshTokenCookie(
+      res,
+      tokens.refreshSession.refreshToken,
+      tokens.refreshSession.expiresInSeconds,
+    );
 
-    res.status(200).json({ message: "Login successful", user });
+    res.setHeader("Cache-Control", "no-store");
+    res.status(200).json({
+      message: "Login successful",
+      user,
+      accessToken: tokens.accessToken,
+      accessTokenExpiresInSeconds: tokens.accessTokenExpiresInSeconds,
+    });
   } catch (error: unknown) {
     sendControllerError(error, res, {
       internalServerError: "Failed to log in",
+    });
+  }
+};
+
+// POST /api/v1/auth/refresh
+export const refresh = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const currentRefreshToken = getRefreshTokenCookie(req);
+
+    if (!currentRefreshToken) {
+      res.status(401).json({ message: "Refresh token is required" });
+      return;
+    }
+
+    const rotation = await rotateRefreshToken(currentRefreshToken);
+
+    if (rotation.status !== "rotated") {
+      clearRefreshTokenCookie(res);
+      res.status(401).json({ message: "Refresh token is invalid or expired" });
+      return;
+    }
+
+    const user = await authService.getUserById(rotation.userId);
+
+    if (!user) {
+      await revokeRefreshSession(rotation.sessionId);
+      clearRefreshTokenCookie(res);
+      res.status(401).json({ message: "User no longer exists" });
+      return;
+    }
+
+    const access = issueAccessToken({
+      userId: rotation.userId,
+      sessionId: rotation.sessionId,
+    });
+
+    setRefreshTokenCookie(
+      res,
+      rotation.refreshToken,
+      rotation.expiresInSeconds,
+    );
+
+    res.setHeader("Cache-Control", "no-store");
+    res.status(200).json({
+      ...access,
+      user,
+    });
+  } catch (error: unknown) {
+    sendControllerError(error, res, {
+      internalServerError: "Failed to refresh authentication",
     });
   }
 };
@@ -75,13 +154,13 @@ export const logout = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const sessionToken = getSessionCookie(req);
+    const refreshToken = getRefreshTokenCookie(req);
 
-    if (sessionToken) {
-      await deleteSession(sessionToken);
+    if (refreshToken) {
+      await revokeRefreshToken(refreshToken);
     }
 
-    clearSessionCookie(res);
+    clearRefreshTokenCookie(res);
     res.status(200).json({ message: "Logged out successfully" });
   } catch (error: unknown) {
     sendControllerError(error, res, {
@@ -99,8 +178,8 @@ export const getCurrentUser = async (
     const user = await authService.getUserById(req.auth!.userId);
 
     if (!user) {
-      await deleteSession(req.auth!.sessionToken);
-      clearSessionCookie(res);
+      await revokeRefreshSession(req.auth!.sessionId);
+      clearRefreshTokenCookie(res);
       res.status(401).json({ message: "User no longer exists" });
       return;
     }

@@ -11,6 +11,7 @@ const router = Router();
 
 router.post("/signup", validateSignup, controller.signup);
 router.post("/login", validateLogin, controller.login);
+router.post("/refresh", controller.refresh);
 router.post("/logout", controller.logout);
 router.get("/me", requireAuth, controller.getCurrentUser);
 

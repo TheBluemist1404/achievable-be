@@ -3,7 +3,7 @@ declare global {
     interface Request {
       auth?: {
         userId: string;
-        sessionToken: string;
+        sessionId: string;
       };
     }
   }
