@@ -1,0 +1,28 @@
+name: Validate backend container
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  container:
+    name: Build production container
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build production container
+        run: docker build --tag achievable-be:ci .
+
+      - name: Load application from production container
+        run: >-
+          docker run --rm
+          --env NODE_ENV=test
+          --env CLIENT_URL=http://localhost:5173
+          --env ACCESS_TOKEN_SECRET=ci-only-access-token-secret-with-at-least-32-bytes
+          achievable-be:ci
+          node -e "require('./dist/app'); console.log('Production container loaded successfully')"

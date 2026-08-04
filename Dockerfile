@@ -1,47 +1,34 @@
-# syntax = docker/dockerfile:1
+FROM node:24.18.0-bookworm-slim AS base
 
-# Adjust NODE_VERSION as desired
-ARG NODE_VERSION=22.21.1
-FROM node:${NODE_VERSION}-slim AS base
-
-LABEL fly_launch_runtime="Node.js"
-
-# Node.js app lives here
 WORKDIR /app
 
-# Set production environment
-ENV NODE_ENV="production"
-ARG YARN_VERSION=1.22.21
-RUN npm install -g yarn@$YARN_VERSION --force
+RUN corepack enable \
+  && corepack prepare yarn@1.22.22 --activate
 
+FROM base AS dependencies
 
-# Throw-away build stage to reduce size of final image
-FROM base AS build
-
-# Install packages needed to build node modules
-RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y build-essential node-gyp pkg-config python-is-python3
-
-# Install node modules
 COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile --production=false
+RUN yarn install --frozen-lockfile --non-interactive
 
-# Copy application code
-COPY . .
+FROM dependencies AS build
 
-# Build application
-RUN yarn run build
+COPY tsconfig.json ./
+COPY src ./src
+RUN yarn build
 
-# Remove development dependencies
-RUN yarn install --production=true
+FROM base AS production
 
+ENV NODE_ENV=production
+ENV PORT=8080
 
-# Final stage for app image
-FROM base
+COPY package.json yarn.lock ./
+RUN yarn install --frozen-lockfile --non-interactive --production=true \
+  && yarn cache clean
 
-# Copy built application
-COPY --from=build /app /app
+COPY --from=build --chown=node:node /app/dist ./dist
 
-# Start the server by default, this can be overwritten at runtime
-EXPOSE 3000
-CMD [ "yarn", "run", "start" ]
+USER node
+
+EXPOSE 8080
+
+CMD ["node", "dist/server.js"]
