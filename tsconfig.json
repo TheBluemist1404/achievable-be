@@ -30,6 +30,9 @@
     "newLine": "lf",
     "typeRoots": ["node_modules/@types"]
   },
+  "ts-node": {
+    "files": true
+  },
   "include": ["src"],
   "exclude": ["node_modules"]
 }

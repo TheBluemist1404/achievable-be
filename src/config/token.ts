@@ -46,6 +46,6 @@ export const REFRESH_TOKEN_COOKIE_NAME = isProduction
 export const REFRESH_TOKEN_COOKIE_OPTIONS: CookieOptions = {
   httpOnly: true,
   secure: isProduction,
-  sameSite: "lax",
+  sameSite: isProduction ? "none" : "lax",
   path: "/api/v1/auth",
 };

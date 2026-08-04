@@ -6,8 +6,11 @@ import {
   validateLogin,
   validateSignup,
 } from "@/middlewares/auth.middleware";
+import { requireTrustedOrigin } from "@/middlewares/trusted-origin.middleware";
 
 const router = Router();
+
+router.use(requireTrustedOrigin);
 
 router.post("/signup", validateSignup, controller.signup);
 router.post("/login", validateLogin, controller.login);
