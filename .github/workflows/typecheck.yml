@@ -1,0 +1,33 @@
+name: Type-check backend
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck:
+    name: Type-check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: yarn
+
+      - name: Enable Yarn
+        run: |
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile --non-interactive
+
+      - name: Type-check application
+        run: yarn typecheck
