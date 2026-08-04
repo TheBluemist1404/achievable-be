@@ -1,0 +1,98 @@
+name: Backend CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: yarn
+
+      - name: Enable Yarn
+        run: |
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile --non-interactive
+
+      - name: Type-check, build, and load compiled application
+        run: yarn ci
+
+      - name: Build production container
+        run: docker build --tag achievable-be:ci .
+
+      - name: Load application from production container
+        run: >-
+          docker run --rm
+          --env NODE_ENV=test
+          --env CLIENT_URL=http://localhost:5173
+          --env ACCESS_TOKEN_SECRET=ci-only-access-token-secret-with-at-least-32-bytes
+          achievable-be:ci
+          node -e "require('./dist/app'); console.log('Production container loaded successfully')"
+
+  deploy:
+    name: Deploy to Fly.io
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Fly CLI
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Validate deployment configuration
+        run: |
+          if [ -z "$FLY_APP_NAME" ]; then
+            echo "Missing GitHub Actions variable: FLY_APP_NAME"
+            exit 1
+          fi
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "Missing GitHub Actions secret: FLY_API_TOKEN"
+            exit 1
+          fi
+          flyctl config validate --app "$FLY_APP_NAME" --config fly.toml
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_APP_NAME: ${{ vars.FLY_APP_NAME }}
+
+      - name: Deploy
+        run: flyctl deploy --remote-only --app "$FLY_APP_NAME" --config fly.toml
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_APP_NAME: ${{ vars.FLY_APP_NAME }}
+
+      - name: Show Fly diagnostics after a failed deploy
+        if: failure()
+        continue-on-error: true
+        run: |
+          flyctl status --app "$FLY_APP_NAME"
+          flyctl releases --app "$FLY_APP_NAME"
+          flyctl logs --app "$FLY_APP_NAME" --no-tail
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_APP_NAME: ${{ vars.FLY_APP_NAME }}
