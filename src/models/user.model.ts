@@ -21,6 +21,17 @@ const userSchema = new mongoose.Schema(
       required: true,
       select: false,
     },
+    tags: {
+      type: [
+        {
+          type: String,
+          trim: true,
+          lowercase: true,
+          maxlength: 30,
+        },
+      ],
+      default: [],
+    },
   },
   { timestamps: true },
 );

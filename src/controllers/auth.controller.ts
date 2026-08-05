@@ -1,24 +1,34 @@
 import { LoginDto, SignupDto } from "@/dtos/auth.dto";
-import { Request, Response } from "express";
 import * as authService from "@/services/auth.service";
-import {
-  issueAccessToken,
-  issueTokenPair,
-} from "@/services/auth-token.service";
-import {
-  createRefreshSession,
-  revokeRefreshSession,
-  revokeRefreshToken,
-  rotateRefreshToken,
-} from "@/services/refresh-token.service";
+import type { AuthenticatedSession } from "@/services/auth.service";
 import { sendControllerError } from "@/utils/controller-error";
 import {
   clearRefreshTokenCookie,
   getRefreshTokenCookie,
   setRefreshTokenCookie,
 } from "@/utils/refresh-token-cookie";
+import { Request, Response } from "express";
 
 type EmptyParams = Record<string, never>;
+
+const sendSession = (
+  res: Response,
+  status: number,
+  session: AuthenticatedSession,
+  message?: string,
+): void => {
+  const {
+    refreshToken,
+    refreshTokenExpiresInSeconds,
+    ...publicSession
+  } = session;
+
+  setRefreshTokenCookie(res, refreshToken, refreshTokenExpiresInSeconds);
+  res.setHeader("Cache-Control", "no-store");
+  res
+    .status(status)
+    .json(message ? { message, ...publicSession } : publicSession);
+};
 
 // POST /api/v1/auth/signup
 export const signup = async (
@@ -26,27 +36,14 @@ export const signup = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const user = await authService.signup(req.body);
+    const result = await authService.signup(req.body);
 
-    if (!user) {
+    if (result.status === "email_exists") {
       res.status(409).json({ message: "Email is already registered" });
       return;
     }
 
-    const tokens = await issueTokenPair(user.id);
-    setRefreshTokenCookie(
-      res,
-      tokens.refreshSession.refreshToken,
-      tokens.refreshSession.expiresInSeconds,
-    );
-
-    res.setHeader("Cache-Control", "no-store");
-    res.status(201).json({
-      message: "Account created",
-      user,
-      accessToken: tokens.accessToken,
-      accessTokenExpiresInSeconds: tokens.accessTokenExpiresInSeconds,
-    });
+    sendSession(res, 201, result.session, "Account created");
   } catch (error: unknown) {
     sendControllerError(error, res, {
       badRequest: "Invalid signup data",
@@ -61,33 +58,17 @@ export const login = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const user = await authService.login(req.body);
+    const result = await authService.login(
+      req.body,
+      getRefreshTokenCookie(req),
+    );
 
-    if (!user) {
+    if (result.status === "invalid_credentials") {
       res.status(401).json({ message: "Invalid email or password" });
       return;
     }
 
-    const previousRefreshToken = getRefreshTokenCookie(req);
-
-    if (previousRefreshToken) {
-      await revokeRefreshToken(previousRefreshToken);
-    }
-
-    const tokens = await issueTokenPair(user.id);
-    setRefreshTokenCookie(
-      res,
-      tokens.refreshSession.refreshToken,
-      tokens.refreshSession.expiresInSeconds,
-    );
-
-    res.setHeader("Cache-Control", "no-store");
-    res.status(200).json({
-      message: "Login successful",
-      user,
-      accessToken: tokens.accessToken,
-      accessTokenExpiresInSeconds: tokens.accessTokenExpiresInSeconds,
-    });
+    sendSession(res, 200, result.session, "Login successful");
   } catch (error: unknown) {
     sendControllerError(error, res, {
       internalServerError: "Failed to log in",
@@ -101,46 +82,26 @@ export const refresh = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const currentRefreshToken = getRefreshTokenCookie(req);
+    const result = await authService.refresh(getRefreshTokenCookie(req));
 
-    if (!currentRefreshToken) {
+    if (result.status === "missing_token") {
       res.status(401).json({ message: "Refresh token is required" });
       return;
     }
 
-    const rotation = await rotateRefreshToken(currentRefreshToken);
-
-    if (rotation.status !== "rotated") {
+    if (result.status === "invalid_token") {
       clearRefreshTokenCookie(res);
       res.status(401).json({ message: "Refresh token is invalid or expired" });
       return;
     }
 
-    const user = await authService.getUserById(rotation.userId);
-
-    if (!user) {
-      await revokeRefreshSession(rotation.sessionId);
+    if (result.status === "user_missing") {
       clearRefreshTokenCookie(res);
       res.status(401).json({ message: "User no longer exists" });
       return;
     }
 
-    const access = issueAccessToken({
-      userId: rotation.userId,
-      sessionId: rotation.sessionId,
-    });
-
-    setRefreshTokenCookie(
-      res,
-      rotation.refreshToken,
-      rotation.expiresInSeconds,
-    );
-
-    res.setHeader("Cache-Control", "no-store");
-    res.status(200).json({
-      ...access,
-      user,
-    });
+    sendSession(res, 200, result.session);
   } catch (error: unknown) {
     sendControllerError(error, res, {
       internalServerError: "Failed to refresh authentication",
@@ -154,11 +115,7 @@ export const logout = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const refreshToken = getRefreshTokenCookie(req);
-
-    if (refreshToken) {
-      await revokeRefreshToken(refreshToken);
-    }
+    await authService.logout(getRefreshTokenCookie(req));
 
     clearRefreshTokenCookie(res);
     res.status(200).json({ message: "Logged out successfully" });
@@ -175,16 +132,18 @@ export const getCurrentUser = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const user = await authService.getUserById(req.auth!.userId);
+    const result = await authService.getCurrentUser(
+      req.auth!.userId,
+      req.auth!.sessionId,
+    );
 
-    if (!user) {
-      await revokeRefreshSession(req.auth!.sessionId);
+    if (result.status === "user_missing") {
       clearRefreshTokenCookie(res);
       res.status(401).json({ message: "User no longer exists" });
       return;
     }
 
-    res.status(200).json({ user });
+    res.status(200).json({ user: result.user });
   } catch (error: unknown) {
     sendControllerError(error, res, {
       internalServerError: "Failed to retrieve current user",
