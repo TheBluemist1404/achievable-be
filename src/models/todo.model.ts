@@ -25,7 +25,14 @@ const todoSchema = new mongoose.Schema({
     required: true
   },
   description: String,
-  tags: [String],
+  tags: [
+    {
+      type: String,
+      trim: true,
+      lowercase: true,
+      maxlength: 30,
+    },
+  ],
   remindOptions: {
     type: [String],
     enum: ["2 days", "1 day", "1 hour"], 

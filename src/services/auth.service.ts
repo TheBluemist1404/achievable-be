@@ -1,6 +1,15 @@
 import bcrypt from "bcrypt";
 import { LoginDto, SignupDto } from "@/dtos/auth.dto";
 import User from "@/models/user.model";
+import {
+  issueAccessToken,
+  issueTokenPair,
+} from "@/services/auth-token.service";
+import {
+  revokeRefreshSession,
+  revokeRefreshToken,
+  rotateRefreshToken,
+} from "@/services/refresh-token.service";
 import hash from "@/utils/hash";
 
 export interface AuthUser {
@@ -8,6 +17,32 @@ export interface AuthUser {
   email: string;
   username: string;
 }
+
+export interface AuthenticatedSession {
+  user: AuthUser;
+  accessToken: string;
+  accessTokenExpiresInSeconds: number;
+  refreshToken: string;
+  refreshTokenExpiresInSeconds: number;
+}
+
+export type SignupResult =
+  | { status: "created"; session: AuthenticatedSession }
+  | { status: "email_exists" };
+
+export type LoginResult =
+  | { status: "authenticated"; session: AuthenticatedSession }
+  | { status: "invalid_credentials" };
+
+export type RefreshResult =
+  | { status: "refreshed"; session: AuthenticatedSession }
+  | { status: "missing_token" }
+  | { status: "invalid_token" }
+  | { status: "user_missing" };
+
+export type CurrentUserResult =
+  | { status: "found"; user: AuthUser }
+  | { status: "user_missing" };
 
 const toAuthUser = (user: {
   _id: { toString(): string };
@@ -28,15 +63,32 @@ const isDuplicateKeyError = (error: unknown): boolean => {
   );
 };
 
-export async function signup({
+const getUserById = async (userId: string): Promise<AuthUser | null> => {
+  const user = await User.findById(userId);
+  return user ? toAuthUser(user) : null;
+};
+
+const issueSession = async (user: AuthUser): Promise<AuthenticatedSession> => {
+  const tokens = await issueTokenPair(user.id);
+
+  return {
+    user,
+    accessToken: tokens.accessToken,
+    accessTokenExpiresInSeconds: tokens.accessTokenExpiresInSeconds,
+    refreshToken: tokens.refreshSession.refreshToken,
+    refreshTokenExpiresInSeconds: tokens.refreshSession.expiresInSeconds,
+  };
+};
+
+export const signup = async ({
   email,
   username,
   password,
-}: SignupDto): Promise<AuthUser | null> {
+}: SignupDto): Promise<SignupResult> => {
   const existingUser = await User.exists({ email });
 
   if (existingUser) {
-    return null;
+    return { status: "email_exists" };
   }
 
   const hashPassword = await hash(password);
@@ -47,37 +99,99 @@ export async function signup({
       username,
       password: hashPassword,
     });
+    const session = await issueSession(toAuthUser(user));
 
-    return toAuthUser(user);
+    return { status: "created", session };
   } catch (error: unknown) {
     if (isDuplicateKeyError(error)) {
-      return null;
+      return { status: "email_exists" };
     }
 
     throw error;
   }
-}
+};
 
-export async function login({
-  email,
-  password,
-}: LoginDto): Promise<AuthUser | null> {
+export const login = async (
+  { email, password }: LoginDto,
+  previousRefreshToken: string | null,
+): Promise<LoginResult> => {
   const existingUser = await User.findOne({ email }).select("+password");
 
   if (!existingUser || !existingUser.password) {
-    return null;
+    return { status: "invalid_credentials" };
   }
 
-  const matchPassword = await bcrypt.compare(password, existingUser.password);
+  const passwordMatches = await bcrypt.compare(
+    password,
+    existingUser.password,
+  );
 
-  if (!matchPassword) {
-    return null;
+  if (!passwordMatches) {
+    return { status: "invalid_credentials" };
   }
 
-  return toAuthUser(existingUser);
-}
+  if (previousRefreshToken) {
+    await revokeRefreshToken(previousRefreshToken);
+  }
 
-export async function getUserById(userId: string): Promise<AuthUser | null> {
-  const user = await User.findById(userId);
-  return user ? toAuthUser(user) : null;
-}
+  const session = await issueSession(toAuthUser(existingUser));
+  return { status: "authenticated", session };
+};
+
+export const refresh = async (
+  currentRefreshToken: string | null,
+): Promise<RefreshResult> => {
+  if (!currentRefreshToken) {
+    return { status: "missing_token" };
+  }
+
+  const rotation = await rotateRefreshToken(currentRefreshToken);
+
+  if (rotation.status !== "rotated") {
+    return { status: "invalid_token" };
+  }
+
+  const user = await getUserById(rotation.userId);
+
+  if (!user) {
+    await revokeRefreshSession(rotation.sessionId);
+    return { status: "user_missing" };
+  }
+
+  const access = issueAccessToken({
+    userId: rotation.userId,
+    sessionId: rotation.sessionId,
+  });
+
+  return {
+    status: "refreshed",
+    session: {
+      user,
+      ...access,
+      refreshToken: rotation.refreshToken,
+      refreshTokenExpiresInSeconds: rotation.expiresInSeconds,
+    },
+  };
+};
+
+export const logout = async (
+  refreshToken: string | null,
+): Promise<void> => {
+  if (refreshToken) {
+    await revokeRefreshToken(refreshToken);
+  }
+};
+
+export const getCurrentUser = async (
+  userId: string,
+  sessionId: string,
+): Promise<CurrentUserResult> => {
+  const user = await getUserById(userId);
+
+  if (!user) {
+    await revokeRefreshSession(sessionId);
+    return { status: "user_missing" };
+  }
+
+  return { status: "found", user };
+};

@@ -1,7 +1,6 @@
 import { CreateTodoDto, TodoParams, UpdateTodoDto } from "@/dtos/todo.dto";
-import Todo from "@/models/todo.model";
+import * as todoService from "@/services/todo.service";
 import { sendControllerError } from "@/utils/controller-error";
-import { toSlug } from "@/utils/to-slug";
 import { Request, Response } from "express";
 
 type EmptyParams = Record<string, never>;
@@ -12,18 +11,7 @@ export const createTodo = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const { title, description, tags, remindOptions, dueDate } = req.body;
-    const slug = toSlug(title, description);
-
-    const todo = await Todo.create({
-      ownerId: req.auth!.userId,
-      title,
-      description,
-      tags,
-      remindOptions,
-      dueDate,
-      slug,
-    });
+    const todo = await todoService.createTodo(req.auth!.userId, req.body);
 
     res.status(201).json({ message: "New todo created", todo });
   } catch (error: unknown) {
@@ -40,7 +28,7 @@ export const getTodos = async (
   res: Response
 ): Promise<void> => {
   try {
-    const todos = await Todo.find({ ownerId: req.auth!.userId });
+    const todos = await todoService.getTodos(req.auth!.userId);
     res.status(200).json({ todos });
   } catch (error: unknown) {
     sendControllerError(error, res, {
@@ -55,12 +43,10 @@ export const getTodoById = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { id } = req.params;
-
-    const todo = await Todo.findOne({
-      _id: id,
-      ownerId: req.auth!.userId,
-    });
+    const todo = await todoService.getTodoById(
+      req.auth!.userId,
+      req.params.id,
+    );
 
     if (!todo) {
       res.status(404).json({ message: "Todo not found" });
@@ -81,28 +67,16 @@ export const updateTodo = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { id } = req.params;
-    const todo = await Todo.findOne({
-      _id: id,
-      ownerId: req.auth!.userId,
-    });
+    const updatedTodo = await todoService.updateTodo(
+      req.auth!.userId,
+      req.params.id,
+      req.body,
+    );
 
-    if (!todo) {
+    if (!updatedTodo) {
       res.status(404).json({ message: "Todo not found" });
       return;
     }
-
-    const updates: UpdateTodoDto & { slug?: string } = { ...req.body };
-
-    if (req.body.title !== undefined || req.body.description !== undefined) {
-      updates.slug = toSlug(
-        req.body.title ?? todo.title,
-        req.body.description ?? todo.description ?? undefined,
-      );
-    }
-
-    todo.set(updates);
-    const updatedTodo = await todo.save();
 
     res.status(200).json({ todo: updatedTodo });
   } catch (error: unknown) {
@@ -119,14 +93,12 @@ export const deleteTodo = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { id } = req.params;
+    const wasDeleted = await todoService.deleteTodo(
+      req.auth!.userId,
+      req.params.id,
+    );
 
-    const deletedTodo = await Todo.findOneAndDelete({
-      _id: id,
-      ownerId: req.auth!.userId,
-    });
-
-    if (!deletedTodo) {
+    if (!wasDeleted) {
       res.status(404).json({ message: "Todo not found" });
       return;
     }
