@@ -35,17 +35,26 @@ export const updateTodo = async (
   todoId: string,
   input: UpdateTodoDto,
 ) => {
-  const updates: UpdateTodoDto & { slug?: string } = { ...input };
+  const todo = await Todo.findOne({
+    _id: todoId,
+    ownerId,
+  });
 
-  if (input.title !== undefined) {
-    updates.slug = toSlug(input.title, input.description);
+  if (!todo) {
+    return null;
   }
 
-  return Todo.findOneAndUpdate(
-    { _id: todoId, ownerId },
-    { $set: updates },
-    { new: true, runValidators: true },
-  );
+  const updates: UpdateTodoDto & { slug?: string } = { ...input };
+
+  if (input.title !== undefined || input.description !== undefined) {
+    updates.slug = toSlug(
+      input.title ?? todo.title,
+      input.description ?? todo.description ?? undefined,
+    );
+  }
+
+  todo.set(updates);
+  return todo.save();
 };
 
 export const deleteTodo = async (

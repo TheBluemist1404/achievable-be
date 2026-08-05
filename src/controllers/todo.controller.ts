@@ -73,15 +73,10 @@ export const updateTodo = async (
       req.body,
     );
 
-    if (req.body.title !== undefined || req.body.description !== undefined) {
-      updates.slug = toSlug(
-        req.body.title ?? todo.title,
-        req.body.description ?? todo.description ?? undefined,
-      );
+    if (!updatedTodo) {
+      res.status(404).json({ message: "Todo not found" });
+      return;
     }
-
-    todo.set(updates);
-    const updatedTodo = await todo.save();
 
     res.status(200).json({ todo: updatedTodo });
   } catch (error: unknown) {
