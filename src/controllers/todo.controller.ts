@@ -12,13 +12,14 @@ export const createTodo = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const { title, description, remindOptions, dueDate } = req.body;
+    const { title, description, tags, remindOptions, dueDate } = req.body;
     const slug = toSlug(title, description);
 
     const todo = await Todo.create({
       ownerId: req.auth!.userId,
       title,
       description,
+      tags,
       remindOptions,
       dueDate,
       slug,
@@ -81,34 +82,27 @@ export const updateTodo = async (
 ): Promise<void> => {
   try {
     const { id } = req.params;
-    const { title, description, remindOptions, dueDate } = req.body;
+    const todo = await Todo.findOne({
+      _id: id,
+      ownerId: req.auth!.userId,
+    });
 
-    const updates: UpdateTodoDto & { slug?: string } = {};
-
-    if (title !== undefined) {
-      updates.title = title;
-      updates.slug = toSlug(title, description);
-    }
-    if (description !== undefined) {
-      updates.description = description;
-    }
-    if (remindOptions !== undefined) {
-      updates.remindOptions = remindOptions;
-    }
-    if (dueDate !== undefined) {
-      updates.dueDate = dueDate;
-    }
-
-    const updatedTodo = await Todo.findOneAndUpdate(
-      { _id: id, ownerId: req.auth!.userId },
-      { $set: updates },
-      { new: true, runValidators: true }
-    );
-
-    if (!updatedTodo) {
+    if (!todo) {
       res.status(404).json({ message: "Todo not found" });
       return;
     }
+
+    const updates: UpdateTodoDto & { slug?: string } = { ...req.body };
+
+    if (req.body.title !== undefined || req.body.description !== undefined) {
+      updates.slug = toSlug(
+        req.body.title ?? todo.title,
+        req.body.description ?? todo.description ?? undefined,
+      );
+    }
+
+    todo.set(updates);
+    const updatedTodo = await todo.save();
 
     res.status(200).json({ todo: updatedTodo });
   } catch (error: unknown) {
