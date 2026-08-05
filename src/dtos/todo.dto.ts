@@ -8,6 +8,7 @@ export type RemindOption = (typeof REMIND_OPTIONS)[number];
 const todoFields = {
   title: z.string().trim().min(1, "Title is required").max(200),
   description: z.string().trim().max(2000).optional(),
+  tags: z.array(z.string().trim().min(1).max(50)).max(20),
   remindOptions: z
     .array(z.enum(REMIND_OPTIONS))
     .min(1, "Select at least one reminder option"),
@@ -19,7 +20,9 @@ export const createTodoSchema = z.object(todoFields).strict();
 export const updateTodoSchema = z
   .object({
     ...todoFields,
-    dueDate: todoFields.dueDate.nullable(),
+    isCompleted: z.boolean(),
+    completeDate: z.iso.datetime({ offset: true }).nullable(),
+    completeStatus: z.enum(["early", "late"]).nullable(),
   })
   .partial()
   .strict()
