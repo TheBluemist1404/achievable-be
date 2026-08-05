@@ -21,7 +21,9 @@ export const createTodoSchema = z.object(todoFields).strict();
 export const updateTodoSchema = z
   .object({
     ...todoFields,
-    dueDate: todoFields.dueDate.nullable(),
+    isCompleted: z.boolean(),
+    completeDate: z.iso.datetime({ offset: true }).nullable(),
+    completeStatus: z.enum(["early", "late"]).nullable(),
   })
   .partial()
   .strict()

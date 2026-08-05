@@ -38,13 +38,23 @@ const todoSchema = new mongoose.Schema({
     enum: ["2 days", "1 day", "1 hour"], 
     required: true
   },
-  isCompleted: Boolean,
-  dueDate: Date,
+  isCompleted: {
+    type: Boolean,
+    default: false,
+    required: true,
+  },
+  dueDate: {
+    type: Date,
+    required: true,
+  },
   slug: {
     type: String,
     required: true
   },
-  completeDate: Date,
+  completeDate: {
+    type: Date,
+    default: null,
+  },
   completeStatus: {
     type: String,
     enum: ["early", "late"]
