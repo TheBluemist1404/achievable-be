@@ -13,11 +13,6 @@ export const getTags = async (
   try {
     const tags = await tagService.getTags(req.auth!.userId);
 
-    if (!tags) {
-      res.status(404).json({ message: "User not found" });
-      return;
-    }
-
     res.status(200).json({ tags });
   } catch (error: unknown) {
     sendControllerError(error, res, {
@@ -37,12 +32,7 @@ export const createTag = async (
       req.body.name,
     );
 
-    if (!result) {
-      res.status(404).json({ message: "User not found" });
-      return;
-    }
-
-    res.status(200).json(result);
+    res.status(201).json(result);
   } catch (error: unknown) {
     sendControllerError(error, res, {
       badRequest: "Invalid tag data",

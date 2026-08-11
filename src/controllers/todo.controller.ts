@@ -23,10 +23,7 @@ export const createTodo = async (
 };
 
 // GET /api/v1/todo
-export const getTodos = async (
-  req: Request,
-  res: Response
-): Promise<void> => {
+export const getTodos = async (req: Request, res: Response): Promise<void> => {
   try {
     const todos = await todoService.getTodos(req.auth!.userId);
     res.status(200).json({ todos });
@@ -40,13 +37,10 @@ export const getTodos = async (
 // GET /api/v1/todo/:id
 export const getTodoById = async (
   req: Request<TodoParams>,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
-    const todo = await todoService.getTodoById(
-      req.auth!.userId,
-      req.params.id,
-    );
+    const todo = await todoService.getTodoById(req.auth!.userId, req.params.id);
 
     if (!todo) {
       res.status(404).json({ message: "Todo not found" });
@@ -64,7 +58,7 @@ export const getTodoById = async (
 // PUT /api/v1/todo/:id
 export const updateTodo = async (
   req: Request<TodoParams, unknown, UpdateTodoDto>,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const updatedTodo = await todoService.updateTodo(
@@ -90,10 +84,57 @@ export const updateTodo = async (
 // DELETE /api/v1/todo/:id
 export const deleteTodo = async (
   req: Request<TodoParams>,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const wasDeleted = await todoService.deleteTodo(
+      req.auth!.userId,
+      req.params.id,
+    );
+
+    if (!wasDeleted) {
+      res.status(404).json({ message: "Todo not found" });
+      return;
+    }
+
+    res.status(200).json({ message: "Todo deleted successfully" });
+  } catch (error: unknown) {
+    sendControllerError(error, res, {
+      internalServerError: "Failed to delete todo",
+    });
+  }
+};
+
+// PATCH /api/v1/todo/restore/:id
+export const restoreTodo = async (
+  req: Request<TodoParams>,
+  res: Response,
+): Promise<void> => {
+  try {
+    const wasRestored = await todoService.restoreTodo(
+      req.auth!.userId,
+      req.params.id,
+    );
+
+    if (!wasRestored) {
+      res.status(404).json({ message: "Todo not found" });
+      return;
+    }
+    res.status(200).json({ message: "Todo restored successfully" });
+  } catch (error: unknown) {
+    sendControllerError(error, res, {
+      internalServerError: "Failed to restore todo",
+    });
+  }
+}
+
+// DELETE /api/v1/todo/clear/:id
+export const clearTodo = async (
+  req: Request<TodoParams>,
+  res: Response,
+): Promise<void> => {
+  try {
+    const wasDeleted = await todoService.clearTodo(
       req.auth!.userId,
       req.params.id,
     );

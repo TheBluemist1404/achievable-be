@@ -1,19 +1,35 @@
-import User from "@/models/user.model";
+import Tag from "@/models/tag.model";
 
-export const getTags = async (userId: string): Promise<string[] | null> => {
-  const user = await User.findById(userId).select("tags");
-  return user?.tags ?? null;
+export const getTags = async (userId: string) => {
+  return Tag.find({ ownerId: userId }).sort({ name: 1 });
 };
 
 export const createTag = async (
   userId: string,
   name: string,
-): Promise<{ tag: string; tags: string[] } | null> => {
-  const user = await User.findByIdAndUpdate(
-    userId,
-    { $addToSet: { tags: name } },
-    { new: true, runValidators: true },
-  ).select("tags");
+) => {
+  let tag = await Tag.findOne({ ownerId: userId, name });
 
-  return user ? { tag: name, tags: user.tags } : null;
+  if (!tag) {
+    try {
+      tag = await Tag.create({ ownerId: userId, name });
+    } catch (error: unknown) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === 11000
+      ) {
+        tag = await Tag.findOne({ ownerId: userId, name });
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  if (!tag) {
+    throw new Error("Failed to create tag");
+  }
+
+  return { tag, tags: await getTags(userId) };
 };

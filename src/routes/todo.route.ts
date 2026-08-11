@@ -16,5 +16,7 @@ router.get("/", controller.getTodos);
 router.get("/:id", validateTodoId, controller.getTodoById);
 router.put("/:id", validateTodoId, validateUpdateTodo, controller.updateTodo);
 router.delete("/:id", validateTodoId, controller.deleteTodo);
+router.patch("/restore/:id", validateTodoId, controller.restoreTodo);
+router.delete("/clear/:id", validateTodoId, controller.clearTodo);
 
 export default router;

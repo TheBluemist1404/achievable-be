@@ -7,8 +7,12 @@ export const tagNameSchema = z
   .max(30, "Tag name must not exceed 30 characters")
   .transform((tag) => tag.toLowerCase());
 
+export const tagIdSchema = z
+  .string()
+  .regex(/^[a-f\d]{24}$/i, "Invalid tag id");
+
 export const tagListSchema = z
-  .array(tagNameSchema)
+  .array(tagIdSchema)
   .max(20, "A todo can have at most 20 tags")
   .transform((tags) => [...new Set(tags)]);
 

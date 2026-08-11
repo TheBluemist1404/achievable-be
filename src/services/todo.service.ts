@@ -1,14 +1,31 @@
 import { CreateTodoDto, UpdateTodoDto } from "@/dtos/todo.dto";
+import Tag from "@/models/tag.model";
 import Todo from "@/models/todo.model";
 import { toSlug } from "@/utils/to-slug";
+import mongoose from "mongoose";
 
-export const createTodo = async (
+const ensureOwnedTags = async (
   ownerId: string,
-  input: CreateTodoDto,
-) => {
+  tagIds: string[],
+): Promise<void> => {
+  if (tagIds.length === 0) return;
+
+  const ownedTagCount = await Tag.countDocuments({
+    _id: { $in: tagIds },
+    ownerId,
+  });
+
+  if (ownedTagCount !== tagIds.length) {
+    throw new mongoose.Error.ValidationError(undefined);
+  }
+};
+
+export const createTodo = async (ownerId: string, input: CreateTodoDto) => {
   const { title, description, tags, remindOptions, dueDate } = input;
 
-  return Todo.create({
+  await ensureOwnedTags(ownerId, tags);
+
+  const todo = await Todo.create({
     ownerId,
     title,
     description,
@@ -17,17 +34,19 @@ export const createTodo = async (
     dueDate,
     slug: toSlug(title, description),
   });
+
+  return todo.populate("tags");
 };
 
 export const getTodos = async (ownerId: string) => {
-  return Todo.find({ ownerId });
+  return Todo.find({ ownerId }).populate("tags");
 };
 
 export const getTodoById = async (ownerId: string, todoId: string) => {
   return Todo.findOne({
     _id: todoId,
     ownerId,
-  });
+  }).populate("tags");
 };
 
 export const updateTodo = async (
@@ -35,6 +54,10 @@ export const updateTodo = async (
   todoId: string,
   input: UpdateTodoDto,
 ) => {
+  if (input.tags !== undefined) {
+    await ensureOwnedTags(ownerId, input.tags);
+  }
+
   const todo = await Todo.findOne({
     _id: todoId,
     ownerId,
@@ -54,10 +77,30 @@ export const updateTodo = async (
   }
 
   todo.set(updates);
-  return todo.save();
+  const updatedTodo = await todo.save();
+  return updatedTodo.populate("tags");
 };
 
-export const deleteTodo = async (
+// Implement soft delete
+export const deleteTodo = async (ownerId: string, todoId: string): Promise<boolean> => {
+  const todo = await Todo.findOneAndUpdate(
+    { _id: todoId, ownerId },
+    { deletedAt: new Date() },
+  );
+
+  return todo !== null;
+}
+
+export const restoreTodo = async (ownerId: string, todoId: string): Promise<boolean> => {
+  const todo = await Todo.findOneAndUpdate(
+    { _id: todoId, ownerId },
+    { deletedAt: null },
+  );
+
+  return todo !== null;
+};
+
+export const clearTodo = async (
   ownerId: string,
   todoId: string,
 ): Promise<boolean> => {

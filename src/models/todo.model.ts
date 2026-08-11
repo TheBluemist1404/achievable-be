@@ -25,14 +25,15 @@ const todoSchema = new mongoose.Schema({
     required: true
   },
   description: String,
-  tags: [
-    {
-      type: String,
-      trim: true,
-      lowercase: true,
-      maxlength: 30,
-    },
-  ],
+  tags: {
+    type: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Tag",
+      },
+    ],
+    default: [],
+  },
   remindOptions: {
     type: [String],
     enum: ["2 days", "1 day", "1 hour"], 
@@ -58,7 +59,11 @@ const todoSchema = new mongoose.Schema({
   completeStatus: {
     type: String,
     enum: ["early", "late"]
-  }
+  },
+  deletedAt: {
+    type: Date,
+    default: null,
+  },
 }, {timestamps: true})
 
 const Todo = mongoose.model("Todo", todoSchema)

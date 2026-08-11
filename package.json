@@ -10,6 +10,7 @@
   },
   "scripts": {
     "dev": "nodemon --watch src --ext ts --exec \"ts-node -r tsconfig-paths/register src/server.ts\"",
+    "migrate:tags": "ts-node -r tsconfig-paths/register src/scripts/migrate-tags.ts",
     "typecheck": "tsc --noEmit --incremental false",
     "build": "tsc && tsc-alias",
     "verify:build": "node scripts/verify-build.cjs",
